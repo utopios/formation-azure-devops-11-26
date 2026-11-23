@@ -1,0 +1,29 @@
+# Build de validation des pull requests vers main (pipeline « rdv-pr »).
+#
+# Sur Azure Repos, ce pipeline n'est PAS déclenché par une clé pr: (ignorée) mais par la
+# stratégie de branche de main : Repos > Branches > main > Branch policies >
+# Build validation > pipeline rdv-pr, déclenchement automatique, obligatoire,
+# expiration « Immediately when main is updated ».
+#
+# Il compile la branche FUSIONNÉE (refs/pull/<id>/merge) : on teste ce que sera main
+# après la fusion, pas seulement la branche de l'auteur.
+
+name: pr-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+
+variables:
+  - name: NUGET_PACKAGES
+    value: $(Pipeline.Workspace)/.nuget/packages
+
+pool:
+  vmImage: ubuntu-24.04
+
+steps:
+  - template: templates/build-dotnet.yml
+    parameters:
+      configuration: Release
+      # Le numéro de run « pr-20261124.3 » n'est pas une version SemVer valide :
+      # on injecte une pré-version explicite.
+      version: 0.0.0-pr.$(Build.BuildId)
+      publierArtefact: false

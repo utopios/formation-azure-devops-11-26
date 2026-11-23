@@ -1,0 +1,107 @@
+# Étapes de build réutilisables : l'équivalent YAML d'un « task group » classique.
+# Utilisé par azure-pipelines.yml (CI/CD), pr-validation.yml, nightly-regression.yml et agent-prive.yml.
+# Prérequis côté pipeline appelant : la variable NUGET_PACKAGES (dossier du cache NuGet).
+
+parameters:
+  - name: configuration
+    type: string
+    default: Release
+  # Attention : sans ligne name: dans le pipeline appelant, Build.BuildNumber vaut
+  # 20261117.1, refusé comme version d'assembly (CS7034). Passez alors une version explicite.
+  - name: version
+    displayName: Version injectée dans les assemblies (doit rester au format SemVer)
+    type: string
+    default: $(Build.BuildNumber)
+  - name: argumentsTests
+    displayName: Arguments supplémentaires de dotnet test (exemple --filter "Category=Regression")
+    type: string
+    default: ''
+  - name: seuilCouverture
+    displayName: Couverture de lignes minimale, en %
+    type: number
+    default: 80
+  - name: publierArtefact
+    type: boolean
+    default: true
+
+steps:
+  - checkout: self
+    fetchDepth: 1
+
+  - task: UseDotNet@2
+    displayName: Installer le SDK .NET 10
+    inputs:
+      packageType: sdk
+      version: 10.0.x
+
+  # Le cache est restauré si les packages.lock.json n'ont pas changé ; il est sauvegardé
+  # automatiquement en fin de job (étape « Post-job: Cache NuGet »).
+  - task: Cache@2
+    displayName: Cache NuGet
+    inputs:
+      key: 'nuget | "$(Agent.OS)" | **/packages.lock.json'
+      restoreKeys: |
+        nuget | "$(Agent.OS)"
+      path: $(NUGET_PACKAGES)
+
+  - task: DotNetCoreCLI@2
+    displayName: Restaurer les paquets (mode verrouillé)
+    inputs:
+      command: restore
+      projects: Santinord.Rdv.sln
+      restoreArguments: --locked-mode
+
+  - task: DotNetCoreCLI@2
+    displayName: Compiler ${{ parameters.version }}
+    inputs:
+      command: build
+      projects: Santinord.Rdv.sln
+      arguments: >-
+        --configuration ${{ parameters.configuration }}
+        --no-restore
+        -p:Version=${{ parameters.version }}
+
+  # publishTestResults (vrai par défaut) ajoute --logger trx et publie les résultats :
+  # ils apparaissent dans l'onglet Tests du run, même si des tests échouent.
+  - task: DotNetCoreCLI@2
+    displayName: Exécuter les tests
+    inputs:
+      command: test
+      projects: tests/**/*.csproj
+      arguments: >-
+        --configuration ${{ parameters.configuration }}
+        --no-build
+        --collect "XPlat Code Coverage"
+        ${{ parameters.argumentsTests }}
+      publishTestResults: true
+      testRunTitle: rdv-api ${{ parameters.version }}
+
+  - task: PublishCodeCoverageResults@2
+    displayName: Publier la couverture de code
+    condition: succeededOrFailed()
+    inputs:
+      summaryFileLocation: $(Agent.TempDirectory)/**/coverage.cobertura.xml
+
+  - script: >-
+      python3 scripts/verifier-couverture.py ${{ parameters.seuilCouverture }}
+      "$(Agent.TempDirectory)/**/coverage.cobertura.xml"
+    displayName: Vérifier le seuil de couverture (${{ parameters.seuilCouverture }} %)
+
+  - ${{ if eq(parameters.publierArtefact, true) }}:
+      - task: DotNetCoreCLI@2
+        displayName: Publier l'API (zip)
+        inputs:
+          command: publish
+          publishWebProjects: false
+          projects: src/Santinord.Rdv.Api/Santinord.Rdv.Api.csproj
+          arguments: >-
+            --configuration ${{ parameters.configuration }}
+            --no-build
+            --output $(Build.ArtifactStagingDirectory)
+          zipAfterPublish: true
+
+      - task: PublishPipelineArtifact@1
+        displayName: Publier l'artefact rdv-api
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)
+          artifact: rdv-api

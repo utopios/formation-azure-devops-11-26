@@ -1,0 +1,52 @@
+# Test de fumée après déploiement : l'API répond-elle, et est-ce bien la version attendue
+# dans le bon environnement ? Un échec ici fait échouer le stage, donc bloque la suite.
+
+parameters:
+  - name: urlBase
+    type: string
+  - name: environnementAttendu
+    type: string
+  - name: versionAttendue
+    type: string
+    default: $(Build.BuildNumber)
+  - name: tentatives
+    type: number
+    default: 20
+
+steps:
+  - bash: |
+      set -euo pipefail
+      url="${{ parameters.urlBase }}"
+      echo "##[section]Test de fumée sur $url"
+
+      # 1. Attendre que l'API réponde (démarrage, redémarrage App Service)
+      for i in $(seq 1 ${{ parameters.tentatives }}); do
+        # -s sans -S : pas de message curl brut, une ligne lisible par tentative
+        if curl -fs "$url/sante" > /dev/null; then
+          echo "Sonde /sante OK après $i tentative(s)"
+          break
+        fi
+        echo "Tentative $i/${{ parameters.tentatives }} : /sante ne répond pas encore"
+        if [ "$i" -eq ${{ parameters.tentatives }} ]; then
+          echo "##vso[task.logissue type=error]$url/sante ne répond pas"
+          exit 1
+        fi
+        sleep 3
+      done
+
+      # 2. Vérifier la version et l'environnement réellement déployés
+      infos=$(curl -fsS "$url/version")
+      echo "Réponse /version : $infos"
+      version=$(echo "$infos" | python3 -c "import json,sys; print(json.load(sys.stdin)['version'])")
+      environnement=$(echo "$infos" | python3 -c "import json,sys; print(json.load(sys.stdin)['environnement'])")
+
+      if [ "$version" != "${{ parameters.versionAttendue }}" ]; then
+        echo "##vso[task.logissue type=error]Version déployée $version, attendue ${{ parameters.versionAttendue }}"
+        exit 1
+      fi
+      if [ "$environnement" != "${{ parameters.environnementAttendu }}" ]; then
+        echo "##vso[task.logissue type=error]Environnement $environnement, attendu ${{ parameters.environnementAttendu }}"
+        exit 1
+      fi
+      echo "Version $version en $environnement : conforme"
+    displayName: Test de fumée (/sante, /version)

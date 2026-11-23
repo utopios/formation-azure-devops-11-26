@@ -1,0 +1,41 @@
+# Régression de nuit (pipeline « rdv-nuit »).
+# Rejoue toute la suite de tests sur main chaque nuit de semaine, même sans nouveau commit :
+# une régression peut venir d'une dépendance, d'une image d'agent ou d'un test instable.
+
+name: nuit-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+pr: none
+
+schedules:
+  # Les horaires cron sont en UTC : 2 h UTC = 3 h à Lille l'hiver, 4 h l'été.
+  - cron: '0 2 * * 1-5'
+    displayName: Régression de nuit, du lundi au vendredi
+    branches:
+      include:
+        - main
+    always: true
+
+variables:
+  - name: NUGET_PACKAGES
+    value: $(Pipeline.Workspace)/.nuget/packages
+
+pool:
+  vmImage: ubuntu-24.04
+
+steps:
+  - template: templates/build-dotnet.yml
+    parameters:
+      version: 0.0.0-nuit.$(Build.BuildId)
+      publierArtefact: false
+
+  # Les tests marqués [Trait("Category", "Regression")] sont rejoués une seconde fois :
+  # un test qui échoue une fois sur deux est un test instable, à traiter comme un bug.
+  - task: DotNetCoreCLI@2
+    displayName: Rejouer les tests de non-régression
+    inputs:
+      command: test
+      projects: tests/**/*.csproj
+      arguments: --configuration Release --no-build --filter "Category=Regression"
+      publishTestResults: true
+      testRunTitle: Non-régression (second passage)

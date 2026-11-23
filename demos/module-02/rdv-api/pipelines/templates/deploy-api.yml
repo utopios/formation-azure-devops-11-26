@@ -1,0 +1,104 @@
+# Job de déploiement réutilisable : l'équivalent YAML d'un stage de release classique.
+# Un job « deployment » cible un environment Azure DevOps : historique des déploiements,
+# approbations et contrôles (checks) sont portés par l'environment, pas par le YAML.
+# L'artefact du stage Build est téléchargé automatiquement dans $(Pipeline.Workspace)/rdv-api.
+
+parameters:
+  - name: environnement
+    displayName: Environment Azure DevOps (rdv-dev, rdv-recette, rdv-prod)
+    type: string
+  - name: nomEnvironnement
+    displayName: Valeur injectée dans Rdv__NomEnvironnement
+    type: string
+  - name: cible
+    type: string
+    default: simulation
+    values:
+      - simulation
+      - azure
+  - name: nomWebApp
+    type: string
+    default: ''
+  - name: connexionAzure
+    displayName: Connexion de service Azure Resource Manager (fédération d'identité)
+    type: string
+    default: sc-rdv-azure
+  - name: dependsOn
+    type: object
+    default: []
+
+jobs:
+  - deployment: Deployer
+    displayName: Déployer sur ${{ parameters.environnement }}
+    dependsOn: ${{ parameters.dependsOn }}
+    environment: ${{ parameters.environnement }}
+    variables:
+      # En mode azure, un groupe de variables ordinaire par environnement (même nom que
+      # l'environment) fournit urlApp, bandeau et éventuellement dureeCreneauMinutes.
+      # Les secrets de production vivent à part, dans rdv-prod-secrets relié au Key Vault
+      # kv-rdv-prod : un groupe relié à Key Vault ne contient que des secrets du coffre.
+      - ${{ if eq(parameters.cible, 'azure') }}:
+          - group: ${{ parameters.environnement }}
+      # dureeCreneauMinutes est facultative (variable de pipeline réglable au lancement,
+      # ou groupe de variables) : 20 minutes si personne ne l'a définie.
+      - name: dureeCreneauEffective
+        value: $[ coalesce(variables['dureeCreneauMinutes'], '20') ]
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - ${{ if eq(parameters.cible, 'simulation') }}:
+                - task: UseDotNet@2
+                  displayName: Installer .NET 10 sur l'agent
+                  inputs:
+                    packageType: sdk
+                    version: 10.0.x
+
+                - bash: |
+                    set -euo pipefail
+                    dossier="$(Agent.TempDirectory)/rdv"
+                    rm -rf "$dossier" && mkdir -p "$dossier"
+                    unzip -q "$(Pipeline.Workspace)/rdv-api/Santinord.Rdv.Api.zip" -d "$dossier"
+                    cd "$dossier"
+                    nohup dotnet Santinord.Rdv.Api.dll --urls http://localhost:5080 \
+                      > "$(Agent.TempDirectory)/rdv.log" 2>&1 &
+                    echo $! > "$(Agent.TempDirectory)/rdv.pid"
+                    echo "API démarrée (pid $(cat "$(Agent.TempDirectory)/rdv.pid")) pour ${{ parameters.environnement }}"
+                  displayName: Démarrer l'API (simulation de ${{ parameters.environnement }})
+                  env:
+                    ASPNETCORE_ENVIRONMENT: ${{ parameters.nomEnvironnement }}
+                    Rdv__NomEnvironnement: ${{ parameters.nomEnvironnement }}
+                    Rdv__Bandeau: Simulation ${{ parameters.nomEnvironnement }}
+                    Rdv__DureeCreneauMinutes: $(dureeCreneauEffective)
+
+                - template: smoke-test.yml
+                  parameters:
+                    urlBase: http://localhost:5080
+                    environnementAttendu: ${{ parameters.nomEnvironnement }}
+
+                - bash: |
+                    kill "$(cat "$(Agent.TempDirectory)/rdv.pid")" 2>/dev/null || true
+                    echo "##[group]Journal de l'API"
+                    cat "$(Agent.TempDirectory)/rdv.log"
+                    echo "##[endgroup]"
+                  displayName: Arrêter l'API et afficher son journal
+                  condition: always()
+
+            - ${{ if eq(parameters.cible, 'azure') }}:
+                - task: AzureWebApp@1
+                  displayName: Déployer sur App Service ${{ parameters.nomWebApp }}
+                  inputs:
+                    azureSubscription: ${{ parameters.connexionAzure }}
+                    appType: webAppLinux
+                    appName: ${{ parameters.nomWebApp }}
+                    package: $(Pipeline.Workspace)/rdv-api/Santinord.Rdv.Api.zip
+                    runtimeStack: DOTNETCORE|10.0
+                    appSettings: >-
+                      -Rdv__NomEnvironnement "${{ parameters.nomEnvironnement }}"
+                      -Rdv__Bandeau "$(bandeau)"
+                      -Rdv__DureeCreneauMinutes "$(dureeCreneauEffective)"
+
+                - template: smoke-test.yml
+                  parameters:
+                    urlBase: $(urlApp)
+                    environnementAttendu: ${{ parameters.nomEnvironnement }}

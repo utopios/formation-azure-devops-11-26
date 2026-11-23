@@ -1,0 +1,47 @@
+# Requêtes de test manuel de l'API RDV (VS Code REST Client ou Visual Studio).
+# Lancer l'API : dotnet run --project src/Santinord.Rdv.Api --urls http://localhost:5080
+# @jour : un jour ouvré (lundi-samedi) postérieur à maintenant et à moins de 90 jours,
+# sinon l'API répond 422 « Créneau passé » ou « au-delà de l'horizon de réservation ».
+# Valeur par défaut : le vendredi de la session de novembre 2026 ; à adapter.
+
+@base = http://localhost:5080
+@jour = 2026-11-27
+
+### Santé
+GET {{base}}/sante
+
+### Version et environnement
+GET {{base}}/version
+
+### Praticiens
+GET {{base}}/api/praticiens
+
+### Créneaux libres du Dr Leroy
+GET {{base}}/api/creneaux?praticienId=DR-LV-01&date={{jour}}
+
+### Réserver
+# @name reservation
+POST {{base}}/api/rendez-vous
+Content-Type: application/json
+
+{
+  "praticienId": "DR-LV-01",
+  "patientId": "P-104233",
+  "debut": "{{jour}}T10:00:00"
+}
+
+### Consulter le rendez-vous créé
+GET {{base}}{{reservation.response.headers.Location}}
+
+### Deuxième rendez-vous du même patient le même jour (doit être refusé : 409)
+POST {{base}}/api/rendez-vous
+Content-Type: application/json
+
+{
+  "praticienId": "DR-LV-01",
+  "patientId": "P-104233",
+  "debut": "{{jour}}T16:00:00"
+}
+
+### Annuler le rendez-vous créé
+DELETE {{base}}{{reservation.response.headers.Location}}

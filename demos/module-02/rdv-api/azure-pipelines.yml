@@ -1,0 +1,132 @@
+# rdv-api — pipeline CI/CD multi-étapes (pipeline « rdv-ci-cd »)
+#
+# Build une seule fois, puis déploie le MÊME artefact en Dev, Recette et Production.
+#   Build    : restauration verrouillée, compilation, tests, couverture, artefact
+#   Dev      : automatique sur toute branche poussée (hors pull request)
+#   Recette  : main et release/* ; approbation de Léa configurée sur l'environment rdv-recette
+#   Prod     : main et release/* ; validation manuelle + approbation d'Inès sur rdv-prod
+#
+# Paramètre « cible » :
+#   simulation (défaut) : l'API démarre sur l'agent avec la configuration de l'environnement,
+#                         puis le test de fumée l'interroge. Aucune ressource Azure nécessaire.
+#   azure               : déploiement sur trois Azure App Service (voir templates/deploy-api.yml).
+
+name: $(versionMajeure).$(versionMineure).$(Rev:r)
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+      - release/*
+      - feature/*
+  paths:
+    exclude:
+      - '**/*.md'
+      - docs/*
+
+# Sur Azure Repos, la clé pr: est ignorée : la validation des pull requests passe par
+# la stratégie de branche « Build validation » de main (pipelines/pr-validation.yml).
+pr: none
+
+parameters:
+  - name: cible
+    displayName: Cible de déploiement
+    type: string
+    default: simulation
+    values:
+      - simulation
+      - azure
+  - name: deployerProduction
+    displayName: Inclure le stage de production
+    type: boolean
+    default: true
+
+variables:
+  - name: versionMajeure
+    value: 1
+  - name: versionMineure
+    value: 4
+  - name: configurationBuild
+    value: Release
+  - name: NUGET_PACKAGES
+    value: $(Pipeline.Workspace)/.nuget/packages
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+  - stage: Build
+    displayName: Build et tests
+    jobs:
+      - job: Compiler
+        displayName: Compiler, tester, publier
+        steps:
+          - template: pipelines/templates/build-dotnet.yml
+            parameters:
+              configuration: $(configurationBuild)
+              version: $(Build.BuildNumber)
+
+  - stage: Dev
+    displayName: Déploiement Dev
+    dependsOn: Build
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - template: pipelines/templates/deploy-api.yml
+        parameters:
+          environnement: rdv-dev
+          nomEnvironnement: Dev
+          cible: ${{ parameters.cible }}
+          nomWebApp: app-rdv-dev
+
+  - stage: Recette
+    displayName: Déploiement Recette
+    dependsOn: Dev
+    condition: >-
+      and(succeeded(),
+          or(eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+             startsWith(variables['Build.SourceBranch'], 'refs/heads/release/')))
+    jobs:
+      - template: pipelines/templates/deploy-api.yml
+        parameters:
+          environnement: rdv-recette
+          nomEnvironnement: Recette
+          cible: ${{ parameters.cible }}
+          nomWebApp: app-rdv-recette
+
+  - ${{ if eq(parameters.deployerProduction, true) }}:
+      - stage: Prod
+        displayName: Déploiement Production
+        dependsOn: Recette
+        condition: >-
+          and(succeeded(),
+              or(eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+                 startsWith(variables['Build.SourceBranch'], 'refs/heads/release/')))
+        # Avec un contrôle « Exclusive lock » sur rdv-prod : un seul déploiement à la fois,
+        # les runs suivants attendent leur tour au lieu d'être annulés.
+        lockBehavior: sequential
+        jobs:
+          # Intervention manuelle : l'équivalent YAML de la tâche classique « Manual Intervention ».
+          # Un job serveur (agentless) ne consomme aucun parallel job pendant l'attente.
+          - job: VerificationAvantProd
+            displayName: Vérification avant production
+            pool: server
+            timeoutInMinutes: 1440
+            steps:
+              - task: ManualValidation@1
+                displayName: Confirmer la sauvegarde de la base
+                inputs:
+                  notifyUsers: $(Build.RequestedForEmail)
+                  instructions: >-
+                    Vérifiez que la sauvegarde de nuit de la base RDV est disponible
+                    et que le secrétariat de Roubaix est prévenu, puis reprenez le run.
+                  onTimeout: reject
+
+          - template: pipelines/templates/deploy-api.yml
+            parameters:
+              environnement: rdv-prod
+              nomEnvironnement: Production
+              cible: ${{ parameters.cible }}
+              nomWebApp: app-rdv-prod
+              dependsOn:
+                - VerificationAvantProd

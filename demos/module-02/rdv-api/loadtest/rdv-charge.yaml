@@ -1,0 +1,18 @@
+# Configuration Azure Load Testing du test « rdv-charge-creneaux ».
+# Lancée par pipelines/load-test.yml (tâche AzureLoadTest@1) ou depuis le portail Azure.
+version: v0.1
+testId: rdv-charge-creneaux
+displayName: RDV - recherche de créneaux sous charge
+description: Utilisateurs virtuels qui cherchent des créneaux libres pendant 5 minutes
+testType: JMX
+testPlan: rdv-charge.jmx
+engineInstances: 1
+# Le test échoue (et la tâche du pipeline avec lui) si l'un de ces critères est franchi.
+failureCriteria:
+  - avg(response_time_ms) > 300
+  - p95(response_time_ms) > 800
+  - percentage(error) > 2
+# Arrêt anticipé si l'application s'effondre : inutile de payer 5 minutes d'erreurs.
+autoStop:
+  errorPercentage: 50
+  timeWindow: 60

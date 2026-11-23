@@ -1,0 +1,40 @@
+# Exécution sur les agents auto-hébergés de Santinord (pipeline « rdv-agent-prive »).
+#
+# Le pool Santinord-Interne regroupe les agents du datacenter de Roubaix : eux seuls
+# atteignent le SQL Server interne. Les demandes (demands) choisissent un agent dont
+# les capacités correspondent. Si aucun agent du pool n'a ces capacités, le job ne
+# démarre pas (erreur « No agent found in pool … which satisfies the specified
+# demands ») ; s'il en existe mais qu'ils sont occupés ou hors ligne, le job attend en file.
+
+trigger: none
+pr: none
+
+variables:
+  - name: NUGET_PACKAGES
+    value: $(Pipeline.Workspace)/.nuget/packages
+
+pool:
+  name: Santinord-Interne
+  demands:
+    - Agent.OS -equals Linux
+    # Capacité utilisateur ajoutée par Inès sur les agents qui voient le réseau interne :
+    # Organization settings > Agent pools > Santinord-Interne > Agents > <agent> > Capabilities
+    - reseau -equals interne
+
+steps:
+  - bash: |
+      echo "Agent          : $(Agent.Name) ($(Agent.OS), $(Agent.OSArchitecture))"
+      echo "Version agent  : $(Agent.Version)"
+      echo "Dossier de travail : $(Agent.WorkFolder)"
+      echo "Compte de service  : $(whoami)"
+      if command -v nc > /dev/null; then
+        nc -z -w 3 sql-rdv.santinord.local 1433 \
+          && echo "SQL Server interne joignable" \
+          || echo "##vso[task.logissue type=warning]SQL Server interne injoignable depuis cet agent"
+      fi
+    displayName: Identifier l'agent et tester le réseau interne
+
+  - template: templates/build-dotnet.yml
+    parameters:
+      version: 0.0.0-prive.$(Build.BuildId)
+      publierArtefact: false

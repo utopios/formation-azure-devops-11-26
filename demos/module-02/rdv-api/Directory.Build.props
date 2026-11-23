@@ -1,0 +1,16 @@
+<Project>
+  <!-- Réglages communs à tous les projets de la solution RDV. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Company>Santinord</Company>
+    <Product>RDV</Product>
+    <!-- Builds reproductibles : versions des paquets figées dans packages.lock.json,
+         restaurées en mode verrouillé dans le pipeline (option locked-mode de dotnet restore). -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- En Release (pipeline), un avertissement casse le build. -->
+    <TreatWarningsAsErrors Condition="'$(Configuration)' == 'Release'">true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,46 @@
+# Test de charge Azure Load Testing (pipeline « rdv-charge »).
+#
+# Prérequis (une fois, par Inès) :
+#   - une ressource Azure Load Testing « alt-rdv » dans le groupe « rg-rdv-tests » ;
+#   - la connexion de service sc-rdv-azure avec le rôle « Load Test Contributor » sur cette ressource ;
+#   - l'extension Marketplace « Azure Load Testing » installée dans l'organisation (tâche AzureLoadTest@1).
+# Le test et ses critères d'échec sont décrits dans loadtest/rdv-charge.yaml.
+
+trigger: none
+pr: none
+
+parameters:
+  - name: domaineCible
+    displayName: Nom d'hôte de l'API à charger (sans https://)
+    type: string
+    default: app-rdv-recette.azurewebsites.net
+  - name: utilisateurs
+    displayName: Utilisateurs virtuels par moteur
+    type: number
+    default: 200
+
+pool:
+  vmImage: ubuntu-24.04
+
+steps:
+  - checkout: self
+
+  - task: AzureLoadTest@1
+    displayName: Lancer le test de charge rdv-charge-creneaux
+    inputs:
+      azureSubscription: sc-rdv-azure
+      loadTestConfigFile: loadtest/rdv-charge.yaml
+      resourceGroup: rg-rdv-tests
+      loadTestResource: alt-rdv
+      loadTestRunName: rdv-$(Build.BuildNumber)
+      env: |
+        [
+          { "name": "domaine", "value": "${{ parameters.domaineCible }}" },
+          { "name": "utilisateurs", "value": "${{ parameters.utilisateurs }}" }
+        ]
+
+  # La tâche dépose le rapport dans $(System.DefaultWorkingDirectory)/loadTest
+  - publish: $(System.DefaultWorkingDirectory)/loadTest
+    artifact: resultats-charge
+    displayName: Conserver les résultats du test de charge
+    condition: succeededOrFailed()

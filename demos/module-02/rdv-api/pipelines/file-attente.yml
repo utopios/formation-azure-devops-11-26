@@ -1,0 +1,51 @@
+# Démonstration de la file d'attente et des parallel jobs (pipeline « rdv-file-attente »).
+#
+# Quatre jobs identiques de durée fixe. Avec un seul parallel job, ils s'exécutent l'un
+# après l'autre et les suivants attendent en file. Pour qu'ils partent ensemble, il faut
+# à la fois assez de parallel jobs (hébergés ou self-hosted selon le pool) ET, sur un pool
+# privé, assez d'agents en ligne : quatre agents avec un seul parallel job self-hosted
+# n'exécutent toujours qu'un job à la fois. maxParallel plafonne volontairement la
+# consommation d'un pipeline pour ne pas affamer les autres.
+
+trigger: none
+pr: none
+
+parameters:
+  - name: poolPrive
+    displayName: Utiliser le pool Santinord-Interne au lieu des agents hébergés
+    type: boolean
+    default: false
+  - name: maxParallel
+    type: number
+    default: 4
+  - name: dureeSecondes
+    type: number
+    default: 90
+
+jobs:
+  - job: Lot
+    displayName: Lot de travail
+    ${{ if eq(parameters.poolPrive, true) }}:
+      pool:
+        name: Santinord-Interne
+    ${{ else }}:
+      pool:
+        vmImage: ubuntu-24.04
+    strategy:
+      matrix:
+        lot_1:
+          numeroLot: 1
+        lot_2:
+          numeroLot: 2
+        lot_3:
+          numeroLot: 3
+        lot_4:
+          numeroLot: 4
+      maxParallel: ${{ parameters.maxParallel }}
+    steps:
+      - checkout: none
+      - bash: |
+          echo "Lot $(numeroLot) démarré à $(date +%T) sur $(Agent.Name)"
+          sleep ${{ parameters.dureeSecondes }}
+          echo "Lot $(numeroLot) terminé à $(date +%T)"
+        displayName: Travailler ${{ parameters.dureeSecondes }} secondes
