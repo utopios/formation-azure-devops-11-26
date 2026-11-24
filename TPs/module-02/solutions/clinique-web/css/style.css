@@ -1,0 +1,54 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: #1f2933;
+  background: #f5f7fa;
+}
+
+header, footer {
+  padding: 1rem 1.5rem;
+  background: #0b5394;
+  color: #fff;
+}
+
+header h1, header p {
+  margin: 0;
+}
+
+main {
+  max-width: 40rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+label {
+  display: block;
+  margin-top: 1rem;
+  font-weight: 600;
+}
+
+select, textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.5rem;
+  font: inherit;
+}
+
+#creneaux {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+#creneaux li {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid #0b5394;
+  border-radius: 4px;
+  background: #fff;
+}
+
+#message {
+  font-style: italic;
+}

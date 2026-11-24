@@ -18,11 +18,6 @@ document.addEventListener("DOMContentLoaded", () => {
       li.textContent = heure;
       return li;
     }));
-
-    const message = document.getElementById("message");
-    message.textContent = libres.length === 0
-      ? "Plus aucun créneau libre aujourd'hui pour ce médecin."
-      : libres.length + " créneau(x) libre(s).";
   }
 
   medecin.addEventListener("change", afficher);

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clinique - Prendre rendez-vous</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>Clinique</h1>
+    <p>Prendre rendez-vous en ligne</p>
+  </header>
+
+  <main>
+    <section id="prise-rdv">
+      <h2>Choisir un créneau</h2>
+
+      <label for="medecin">Médecin</label>
+      <select id="medecin"></select>
+
+      <h3>Créneaux libres aujourd'hui</h3>
+      <ul id="creneaux"></ul>
+      <p id="message"></p>
+
+      <label for="motif">Motif de la consultation</label>
+      <textarea id="motif" rows="3"></textarea>
+    </section>
+  </main>
+
+  <footer>
+    <p>Pour une urgence, appelez le 15.</p>
+  </footer>
+
+  <script src="js/creneaux.js"></script>
+  <script src="js/disponibilites.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

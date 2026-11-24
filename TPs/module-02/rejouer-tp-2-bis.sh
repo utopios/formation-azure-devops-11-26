@@ -34,7 +34,7 @@ set -euo pipefail
 ICI="$(cd "$(dirname "$0")" && pwd)"
 DEPART="$ICI/../../TPs/module-02/clinique-web"      
 [ -d "$DEPART" ] || DEPART="$ICI/../clinique-web"     
-SOLUTION="$ICI/clinique-web"
+SOLUTION="$ICI/solutions/clinique-web"
 ORG="https://dev.azure.com/$1"
 PROJET="$2"
 DEPOT=clinique-web

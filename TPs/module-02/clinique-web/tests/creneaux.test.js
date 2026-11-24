@@ -19,13 +19,3 @@ describe("Créneaux de la journée", () => {
     assert.deepEqual(creneauxLibres("09:00", "10:00", []), ["09:00", "09:20", "09:40"]);
   });
 });
-
-describe("Créneaux déjà réservés", () => {
-  test("un créneau réservé n'est pas proposé", () => {
-    assert.deepEqual(creneauxLibres("09:00", "10:00", ["09:20"]), ["09:00", "09:40"]);
-  });
-
-  test("une journée complète ne propose aucun créneau", () => {
-    assert.deepEqual(creneauxLibres("09:00", "10:00", ["09:00", "09:20", "09:40"]), []);
-  });
-});

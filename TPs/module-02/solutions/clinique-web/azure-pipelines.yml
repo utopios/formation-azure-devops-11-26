@@ -1,0 +1,32 @@
+# Intégration continue de clinique-web.
+# Se déclenche à chaque push sur main. La validation des pull requests passe
+# par la stratégie de branche de main (Build validation) : sur Azure Repos,
+# une clé pr: serait ignorée.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-24.04
+
+steps:
+  - task: UseNode@1
+    displayName: Node.js 22
+    inputs:
+      version: "22.x"
+
+  - script: >
+      node --test
+      --test-reporter=spec --test-reporter-destination=stdout
+      --test-reporter=junit --test-reporter-destination=resultats-tests.xml
+    displayName: Tests unitaires
+
+  - task: PublishTestResults@2
+    displayName: Publier les résultats des tests
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: resultats-tests.xml
+      testRunTitle: clinique-web
