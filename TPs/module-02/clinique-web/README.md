@@ -1,4 +1,4 @@
-# clinique-web
+# clinique-web-update-convetion
 
 Page de prise de rendez-vous en ligne de la clinique : le patient choisit un médecin et voit ses créneaux libres de la journée.
 
