@@ -26,3 +26,9 @@ Le pipeline `azure-pipelines.yml` lance les mêmes tests à chaque push sur `mai
 | `js/disponibilites.js` | les horaires et réservations des médecins, en attendant l'API de calendrier |
 | `js/app.js` | le lien entre la page et le calcul |
 | `tests/creneaux.test.js` | les tests unitaires |
+
+## Conventions de l'équipe
+
+- Une branche par élément de travail, créée depuis Boards : `feature/<id>-<sujet>`, `bugfix/<id>-<sujet>`.
+- Chaque message de commit cite sa tâche : « Ajoute le formulaire #123 ».
+- Rien n'entre dans `main` sans pull request : un relecteur, une tâche liée, des tests verts.

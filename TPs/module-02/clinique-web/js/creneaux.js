@@ -26,7 +26,8 @@ function creneauxDeLaJournee(ouverture, fermeture) {
 
 // Les créneaux que le patient peut réserver.
 function creneauxLibres(ouverture, fermeture, reservations) {
-  return creneauxDeLaJournee(ouverture, fermeture);
+  return creneauxDeLaJournee(ouverture, fermeture)
+    .filter((heure) => !reservations.includes(heure));
 }
 
 if (typeof module !== "undefined") {
