@@ -1,0 +1,18 @@
+# E1 — ERREUR VOLONTAIRE : une macro $( ) dans une expression de template ${{ }}.
+# Le YAML est refusé avant même le démarrage du run : à la compilation, les macros
+# n'existent pas encore. Correction : ${{ if eq(variables.un, 'V1') }} ou une condition.
+# (Reprend l'ancienne démo 3-Pipelines/Pipeline-demo/1-1-2-variables2.yaml.)
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  un: V1
+
+steps:
+  - script: echo $(un)
+  # - ${{ if eq($(un), 'V1') }}:
+  - ${{ if eq(variables.un, 'V1') }}:
+      - script: echo "= V1"
