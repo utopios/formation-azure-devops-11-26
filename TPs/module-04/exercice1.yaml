@@ -1,15 +1,31 @@
-trigger: master
+trigger: none
 
 pool:
   vmImage: ubuntu-24.04
 
-steps:
-  - script: 'echo building front app'
-    displayName: 'Building front app'
-  - script: 'echo runnning unit tests for front app'
-    displayName: 'Running unit tests for front app'
-  - script: 'echo building back app'
-    displayName: 'Building back app'
-  - script: 'echo running unit tests for back app'
-    displayName: 'Running unit tests for back app'
+# steps:
+#   - script: 'echo building front app'
+#     displayName: 'Building front app'
+#   - script: 'echo runnning unit tests for front app'
+#     displayName: 'Running unit tests for front app'
+#   - script: 'echo building back app'
+#     displayName: 'Building back app'
+#   - script: 'echo running unit tests for back app'
+#     displayName: 'Running unit tests for back app'
 
+
+stages:
+  - stage: Build
+    jobs:
+      - job: BuildFront
+        steps:
+          - script: 'echo building front app'
+            displayName: 'Building front app'
+          - script: 'echo runnning unit tests for front app'
+            displayName: 'Running unit tests for front app'
+      - job: BuildBack
+        steps:
+          - script: 'echo building back app'
+            displayName: 'Building back app'
+          - script: 'echo running unit tests for back app'
+            displayName: 'Running unit tests for back app'
