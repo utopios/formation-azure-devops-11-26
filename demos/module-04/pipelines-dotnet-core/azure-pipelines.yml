@@ -1,14 +1,35 @@
 trigger:
 - master
 
+parameters:
+- name: configuration
+  displayName: Configuration de compilation
+  type: string
+  default: Release
+  values:
+  - Release
+  - Debug
+
 pool:
   vmImage: ubuntu-24.04
 
+variables: 
+  buildconfiguration: ${{ parameters.configuration }}
+
 stages:
 - stage: BuildAndTest
+  variables: 
+    projetsTests: '**/dotnetcore-tests/*.csproj'
   jobs:
   - job: BuildAndTestJob
+    variables: 
+      titresTests: 'dotnet test $(buildconfiguration) - $(Build.BuildNumber)'
     steps:
+    - script: |
+        echo "buildConfiguration = $(buildConfiguration)"
+        echo "projetsTests       = $(projetsTests)"
+        echo "titreTests         = $(titreTests)"
+      displayName: Afficher les variables
     - task: DotNetCoreCLI@2
       displayName: 'Build .NET Core project'
       inputs:
@@ -20,8 +41,40 @@ stages:
       displayName: 'Test .NET Core project'
       inputs:
         command: 'test'
-        projects: '**/dotnetcore-tests/*.csproj'
+        projects: '$(projetsTests)'
         arguments: '--configuration $(buildconfiguration) --logger trx'
-        testRunTitle: 'dotnet test'
+        testRunTitle: '$(titresTests)'
+    
+    - ${{ if eq(parameters.configuration, 'Release') }}:                # évaluée à la compilation
+      - task: DotNetCoreCLI@2
+        displayName: Publier l'application
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+        inputs:
+          command: publish
+          publishWebProjects: false
+          projects: |
+            **/*.csproj
+            !**/dotnetcore-tests/*.csproj
+          arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+          zipAfterPublish: true
+
+      - task: PublishPipelineArtifact@1
+        displayName: Publier l'artefact
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)
+          artifact: app
+
+- stage: Rapport
+  condition: always()
+  jobs:
+  - job: Resume
+    steps:
+    - script: |
+        echo 'buildConfiguration = $(buildConfiguration)'
+        echo 'projetsTests       = $(projetsTests)'
+        echo 'titreTests         = $(titreTests)'
+        echo 'aDesTests          = $(aDesTests)'
+      displayName: Ce que voit un autre stage
 
     
