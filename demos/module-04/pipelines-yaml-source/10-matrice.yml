@@ -1,0 +1,30 @@
+# 10 — Matrice : le même job multiplié par combinaison de variables.
+# Cas Santinord : vérifier que l'API compile sous Linux et Windows, et sur .NET 11
+# (sorti en novembre 2026) avant de décider d'une migration.
+
+trigger: none
+
+jobs:
+  - job: Compatibilite
+    strategy:
+      matrix:
+        linux_net10:
+          imageAgent: ubuntu-24.04
+          versionDotnet: 10.0.x
+        windows_net10:
+          imageAgent: windows-2025
+          versionDotnet: 10.0.x
+        linux_net11:
+          imageAgent: ubuntu-24.04
+          versionDotnet: 11.0.x
+      maxParallel: 2   # au plus deux jobs simultanés pour ce pipeline
+    pool:
+      vmImage: $(imageAgent)
+    steps:
+      - task: UseDotNet@2
+        displayName: Installer .NET $(versionDotnet)
+        inputs:
+          packageType: sdk
+          version: $(versionDotnet)
+      - script: dotnet --version
+        displayName: Version effective sur $(imageAgent)
