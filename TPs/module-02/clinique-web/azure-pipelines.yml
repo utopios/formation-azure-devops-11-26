@@ -1,32 +1,135 @@
-# Intégration continue de clinique-web.
-# Se déclenche à chaque push sur main. La validation des pull requests passe
-# par la stratégie de branche de main (Build validation) : sur Azure Repos,
-# une clé pr: serait ignorée.
+name: $(versionMajeure).$(versionMineure).$(Rev:r)
 
 trigger:
   branches:
     include:
       - main
+      - feature/*
+  paths:
+    exclude:
+      - '**/*.md'
+
+parameters:
+  - name: deposerEnRecette
+    displayName: Déposer en recette
+    type: boolean
+    default: true
 
 pool:
   vmImage: ubuntu-24.04
 
-steps:
-  - task: UseNode@1
-    displayName: Node.js 22
-    inputs:
-      version: "22.x"
+variables:                      # racine : visibles dans tous les stages et jobs
+  versionMajeure: 1
+  versionMineure: 0
+  versionNode: 22.x
 
-  - script: >
-      node --test
-      --test-reporter=spec --test-reporter-destination=stdout
-      --test-reporter=junit --test-reporter-destination=resultats-tests.xml
-    displayName: Tests unitaires
+stages:
+  - stage: Verifier
+    displayName: Vérifier le code
+    jobs:                       # deux jobs sans dependsOn : indépendants, en parallèle
+      - job: Syntaxe
+        displayName: Vérifier la syntaxe
+        steps:
+          - task: UseNode@1
+            displayName: Node.js $(versionNode)
+            inputs:
+              version: $(versionNode)
 
-  - task: PublishTestResults@2
-    displayName: Publier les résultats des tests
-    condition: succeededOrFailed()
-    inputs:
-      testResultsFormat: JUnit
-      testResultsFiles: resultats-tests.xml
-      testRunTitle: clinique-web
+          - bash: |
+              set -euo pipefail
+              for fichier in js/*.js; do
+                node --check "$fichier"
+                echo "Syntaxe correcte : $fichier"
+              done
+            displayName: Vérifier la syntaxe de js/
+
+      - job: Tests
+        displayName: Tests unitaires
+        steps:
+          - task: UseNode@1
+            displayName: Node.js $(versionNode)
+            inputs:
+              version: $(versionNode)
+
+          - script: >
+              node --test
+              --test-reporter=spec --test-reporter-destination=stdout
+              --test-reporter=junit --test-reporter-destination=resultats-tests.xml
+            displayName: Lancer les tests
+
+          - task: PublishTestResults@2
+            displayName: Publier les résultats des tests
+            condition: succeededOrFailed()          # même si des tests ont échoué
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: resultats-tests.xml
+              testRunTitle: clinique-web $(Build.BuildNumber) - Node.js $(versionNode)
+
+          - bash: |
+              node --version
+              ls -la tests
+            displayName: Diagnostic
+            condition: failed()                     # seulement si une étape précédente a échoué
+
+  - stage: Paqueter
+    displayName: Produire le paquet
+    dependsOn: Verifier
+    variables:                  # stage : utile à ce stage seulement
+      dossierSite: $(Agent.TempDirectory)/site
+    jobs:
+      - job: Zip
+        displayName: Zipper la page
+        steps:
+          - bash: |
+              set -euo pipefail
+              mkdir -p "$(dossierSite)"
+              cp -r index.html css js "$(dossierSite)/"
+              printf '{\n  "version": "%s",\n  "commit": "%s"\n}\n' "$(Build.BuildNumber)" "$(Build.SourceVersion)" > "$(dossierSite)/version.json"
+              cat "$(dossierSite)/version.json"
+              echo "##vso[task.setvariable variable=nomZip;isOutput=true]clinique-web-$(Build.BuildNumber).zip"
+            name: paquet                            # préfixe de la variable de sortie : paquet.nomZip
+            displayName: Préparer le site et version.json
+
+          - task: ArchiveFiles@2
+            displayName: Zipper clinique-web $(Build.BuildNumber)
+            inputs:
+              rootFolderOrFile: $(dossierSite)
+              includeRootFolder: false
+              archiveType: zip
+              archiveFile: $(Build.ArtifactStagingDirectory)/clinique-web-$(Build.BuildNumber).zip
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publier l'artefact clinique-web
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)
+              artifact: clinique-web
+
+  - ${{ if eq(parameters.deposerEnRecette, true) }}:   # compilation : stage inséré ou non
+      - stage: Recette
+        displayName: Déposer en recette
+        dependsOn: Paqueter
+        # exécution : sur main, hors validation de pull request
+        condition: >-
+          and(succeeded(),
+              eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+              ne(variables['Build.Reason'], 'PullRequest'))
+        jobs:
+          - job: Deposer
+            displayName: Déposer le paquet (simulation)
+            variables:          # job : la valeur vient d'un autre stage
+              nomZip: $[ stageDependencies.Paqueter.Zip.outputs['paquet.nomZip'] ]
+            steps:
+              - checkout: none
+              - download: current
+                artifact: clinique-web
+
+              - bash: |
+                  set -euo pipefail
+                  paquet="$(Pipeline.Workspace)/clinique-web/$(nomZip)"
+                  test -f "$paquet"
+                  test -n "${MOT_DE_PASSE_RECETTE:-}"
+                  echo "Mot de passe reçu : ${#MOT_DE_PASSE_RECETTE} caractères"
+                  echo "Dépôt de $(nomZip) sur recette.clinique.local"
+                displayName: Déposer sur le serveur de recette
+                env:
+                  MOT_DE_PASSE_RECETTE: $(motDePasseRecette)  
