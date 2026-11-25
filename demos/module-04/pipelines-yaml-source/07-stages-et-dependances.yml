@@ -1,0 +1,65 @@
+# 07 — Stages, jobs et dépendances : éventail (fan-out) puis regroupement (fan-in).
+#
+#   Build ──> Test ──┬──> DeployLille ───┐
+#                    └──> DeployRoubaix ─┴──> DeployVilleneuve
+#   Audit (dependsOn: []) s'exécute en parallèle de tout le reste.
+#
+# Correction de l'ancienne démo 3-1-depend.yaml : un stage doit contenir au moins un job.
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+  - stage: Build
+    jobs:
+      - job: Compiler
+        steps:
+          - script: echo "Compilation"
+
+  - stage: Test
+    dependsOn: Build   # implicite (stage précédent), écrit ici pour la lisibilité
+    jobs:
+      - job: Unitaires
+        steps:
+          - script: echo "Tests unitaires"
+      - job: Integration
+        steps:
+          - script: echo "Tests d'intégration (en parallèle des unitaires)"
+      - job: Rapport
+        dependsOn:
+          - Unitaires
+          - Integration
+        steps:
+          - script: echo "Consolidation des résultats"
+
+  - stage: DeployLille
+    dependsOn: Test
+    jobs:
+      - job: Deployer
+        steps:
+          - script: echo "Déploiement centre de Lille-Vauban"
+
+  - stage: DeployRoubaix
+    dependsOn: Test
+    jobs:
+      - job: Deployer
+        steps:
+          - script: echo "Déploiement centre de Roubaix-Gare"
+
+  - stage: DeployVilleneuve
+    dependsOn:
+      - DeployLille
+      - DeployRoubaix
+    jobs:
+      - job: Deployer
+        steps:
+          - script: echo "Déploiement centre de Villeneuve-d'Ascq, après Lille ET Roubaix"
+
+  - stage: Audit
+    dependsOn: []   # aucune dépendance : démarre tout de suite
+    jobs:
+      - job: Licences
+        steps:
+          - script: echo "Inventaire des licences des dépendances"

@@ -1,0 +1,66 @@
+# 08 — Conditions : décider à l'exécution si une étape, un job ou un stage s'exécute.
+# Condition par défaut : succeeded() (tout ce qui précède a réussi).
+# Lancer deux fois : faireEchouerLesTests = false, puis true, et comparer.
+
+trigger: none
+
+parameters:
+  - name: faireEchouerLesTests
+    type: boolean
+    default: false
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+  - stage: Tests
+    jobs:
+      - job: Unitaires
+        steps:
+          - bash: |
+              echo "Exécution des tests"
+              if [ "${{ parameters.faireEchouerLesTests }}" = "True" ]; then
+                echo "##vso[task.logissue type=error]Deux tests en échec"
+                exit 1
+              fi
+            displayName: Tests
+
+          - script: echo "Publication des résultats, que les tests aient réussi ou non"
+            displayName: Publier les résultats
+            condition: succeededOrFailed()
+
+          - script: echo "Collecte des journaux de diagnostic"
+            displayName: Diagnostic sur échec
+            condition: failed()
+
+  - stage: Deploiement
+    dependsOn: Tests
+    # Réussite ET branche main ET pas une validation de pull request
+    condition: >-
+      and(succeeded(),
+          eq(variables['Build.SourceBranch'], 'refs/heads/main'),
+          ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: Deployer
+        steps:
+          - script: echo "Déploiement"
+
+  - stage: Alerte
+    dependsOn: Tests
+    condition: failed()
+    jobs:
+      - job: Prevenir
+        steps:
+          - script: echo "Les tests ont échoué — message à l'équipe"
+
+  - stage: Rapport
+    dependsOn:
+      - Tests
+      - Deploiement
+    condition: always()   # même si un stage a échoué ou a été ignoré
+    jobs:
+      - job: Resume
+        steps:
+          - script: echo "Rapport de fin de run"
+          - script: echo "Exécuté seulement si le run a été déclenché manuellement"
+            condition: eq(variables['Build.Reason'], 'Manual')
