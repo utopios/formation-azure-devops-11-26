@@ -1,0 +1,53 @@
+# 02 — Portée des variables : racine, stage, job.
+# Une variable est visible dans son niveau et dans tous les niveaux qu'il contient,
+# jamais dans un niveau voisin. Une macro $(x) inconnue reste affichée telle quelle.
+# Les lignes qui l'affichent sont entre guillemets simples : entre guillemets doubles,
+# Bash prendrait $(x) pour une substitution de commande (« x: command not found »).
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  varGlobale: valeur-globale
+
+stages:
+  - stage: Stage1
+    displayName: Stage 1 - Build
+    variables:
+      varStage1: valeur-stage1
+    jobs:
+      - job: Job1
+        variables:
+          varJob1: valeur-job1
+        steps:
+          - script: |
+              echo "Stage1 > Job1"
+              echo "  varGlobale = $(varGlobale)"
+              echo "  varStage1  = $(varStage1)"
+              echo "  varJob1    = $(varJob1)"
+            displayName: Variables visibles dans Job1
+
+      - job: Job2
+        steps:
+          - script: |
+              echo "Stage1 > Job2"
+              echo "  varGlobale = $(varGlobale)"
+              echo "  varStage1  = $(varStage1)"
+              echo '  varJob1    = $(varJob1)   <- non résolue : définie dans Job1 seulement'
+            displayName: Variables visibles dans Job2
+
+  - stage: Stage2
+    displayName: Stage 2 - Deploy
+    jobs:
+      - job: Job1
+        variables:
+          varJob1: autre-valeur-job1   # même nom, autre job, autre valeur
+        steps:
+          - script: |
+              echo "Stage2 > Job1"
+              echo "  varGlobale = $(varGlobale)"
+              echo '  varStage1  = $(varStage1)   <- non résolue : définie dans Stage1'
+              echo "  varJob1    = $(varJob1)"
+            displayName: Variables visibles dans Stage2

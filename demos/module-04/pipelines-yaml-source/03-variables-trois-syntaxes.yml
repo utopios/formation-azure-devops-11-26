@@ -1,0 +1,52 @@
+# 03 — Trois syntaxes, trois moments d'évaluation.
+#
+#   ${{ variables.x }}  expression de template : remplacée à la COMPILATION du YAML,
+#                       avant le démarrage du run ; ne voit que les variables du YAML.
+#   $(x)                macro : remplacée juste avant l'exécution de CHAQUE tâche.
+#   $[ variables.x ]    expression d'exécution : évaluée au démarrage du job ;
+#                       c'est aussi la syntaxe implicite des « condition: ».
+#
+# À faire observer : après le setvariable de l'étape 2, la macro et la condition voient
+# « vert », l'expression de template est restée figée sur « bleu ».
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  - name: couleur
+    value: bleu
+  - name: copieCompilation
+    value: ${{ variables.couleur }}
+  - name: estBleuAuDemarrage
+    value: $[ eq(variables.couleur, 'bleu') ]
+
+steps:
+  - script: |
+      echo "macro              : $(couleur)"
+      echo "template           : ${{ variables.couleur }}"
+      echo "copieCompilation   : $(copieCompilation)"
+      echo "estBleuAuDemarrage : $(estBleuAuDemarrage)"
+    displayName: 1. Avant le changement
+
+  - bash: echo "##vso[task.setvariable variable=couleur]vert"
+    displayName: 2. setvariable couleur=vert
+
+  - script: |
+      echo "macro          : $(couleur)"
+      echo "template       : ${{ variables.couleur }}"
+      echo "env (COULEUR)  : $COULEUR"
+    displayName: 3. Après le changement
+
+  - script: echo "La condition, évaluée à l'exécution, voit bien vert"
+    displayName: 4. Condition d'exécution
+    condition: eq(variables['couleur'], 'vert')
+
+  - ${{ if eq(variables.couleur, 'vert') }}:
+      - script: echo "Jamais inséré, car à la compilation couleur valait bleu"
+        displayName: 5. Insertion conditionnelle (compilation)
+
+  - ${{ if eq(variables.couleur, 'bleu') }}:
+      - script: echo "Inséré à la compilation, quoi qu'il arrive ensuite"
+        displayName: 6. Insertion conditionnelle (compilation)
