@@ -1,0 +1,12 @@
+# E4 — ERREUR VOLONTAIRE : steps indenté sous pool.
+# Le parseur lit « pool.steps », une clé qu'Azure Pipelines ignore : le pipeline n'a plus
+# aucune étape. Le message ne cite aucune ligne (« The pipeline must contain at least one
+# stage with no dependencies ») : il décrit la conséquence, pas la cause.
+# En YAML, l'indentation est la syntaxe. Correction : steps au même niveau que pool.
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-24.04
+  steps:
+    - script: echo "Je ne serai jamais exécuté"

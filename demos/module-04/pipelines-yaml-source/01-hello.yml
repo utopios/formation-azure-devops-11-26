@@ -1,0 +1,19 @@
+# 01 — Le plus petit pipeline utile.
+# Un déclencheur, un pool, une étape. Pas de stage ni de job explicites :
+# Azure Pipelines crée un stage et un job implicites.
+
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-24.04   # épingler la version plutôt que ubuntu-latest
+
+steps:
+  - script: echo "Bonjour depuis l'agent $(Agent.Name)"
+    displayName: Dire bonjour
+
+  - bash: |
+      echo "Branche : $(Build.SourceBranchName)"
+      echo "Commit  : $(Build.SourceVersion)"
+      ls -la "$(Build.SourcesDirectory)"
+    displayName: Montrer le contexte du run

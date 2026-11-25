@@ -1,0 +1,18 @@
+# E6 — ERREUR VOLONTAIRE : « : » suivi d'une espace dans une chaîne non quotée.
+# YAML y voit une nouvelle clé ; un analyseur YAML classique répond « mapping values are
+# not allowed here », Azure Pipelines affiche son propre message à la validation.
+# Piège fréquent en français, qui met une espace avant ET après les deux-points.
+# Corrections possibles :
+#   - script: 'echo "Version : 1.4"'       (quoter toute la valeur)
+#   - script: |                            (bloc littéral)
+#       echo "Version : 1.4"
+#   - script: echo "Version - 1.4"         (éviter les deux-points)
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-24.04
+
+steps:
+  - script: 'echo "Version : 1.4"'
+  
