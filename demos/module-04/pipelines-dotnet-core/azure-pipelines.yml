@@ -1,0 +1,27 @@
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+- stage: BuildAndTest
+  jobs:
+  - job: BuildAndTestJob
+    steps:
+    - task: DotNetCoreCLI@2
+      displayName: 'Build .NET Core project'
+      inputs:
+        command: 'build'
+        projects: '**/*.csproj'
+        arguments: '--configuration $(buildconfiguration)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Test .NET Core project'
+      inputs:
+        command: 'test'
+        projects: '**/dotnetcore-tests/*.csproj'
+        arguments: '--configuration $(buildconfiguration) --logger trx'
+        testRunTitle: 'dotnet test'
+
+    
