@@ -1,0 +1,19 @@
+trigger: none
+pool: 
+  vmImage: ubuntu-24.04
+stages:
+  - stage: build
+    jobs:
+      - job: Api
+        steps:
+          - template: templates/etapes-build.yml
+            parameters:
+              projet: Santinord.Rdv.Api
+      
+      - job: Front
+        steps:
+          - template: templates/etapes-build.yml
+            parameters:
+              projet: Santinord.Rdv.Front
+              configuration: Debug
+              executerTests: false

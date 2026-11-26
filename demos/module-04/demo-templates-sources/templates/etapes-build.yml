@@ -1,0 +1,24 @@
+parameters:
+  - name: projet
+    type: string
+  - name: configuration
+    type: string
+    default: Release
+    values:
+      - Debug
+      - Release
+  - name: executerTests
+    type: boolean
+    default: true
+
+steps:
+  - script: echo "Restauration et compilation de ${{ parameters.projet }} (${{ parameters.configuration }})"
+    displayName: Compiler ${{ parameters.projet }}
+
+  - ${{ if eq(parameters.executerTests, true) }}:
+      - script: echo "Tests de ${{ parameters.projet }}"
+        displayName: Tester ${{ parameters.projet }}
+
+  - script: echo "Publication de l'artefact ${{ parameters.projet }}"
+    displayName: Publier ${{ parameters.projet }}
+
