@@ -1,0 +1,19 @@
+# Template d'étapes : vérifier que l'application répond ce qu'on attend.
+parameters:
+  - name: urlBase
+    type: string
+  - name: texteAttendu
+    type: string
+    default: Hello buddy
+
+steps:
+  - bash: |
+      set -euo pipefail
+      # --retry-connrefused : on réessaie tant que l'application démarre
+      reponse=$(curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 2 "${{ parameters.urlBase }}/")
+      echo "Réponse : $reponse"
+      if [ "$reponse" != "${{ parameters.texteAttendu }}" ]; then
+        echo "##vso[task.logissue type=error]Réponse inattendue : $reponse"
+        exit 1
+      fi
+    displayName: Test de fumée sur ${{ parameters.urlBase }}

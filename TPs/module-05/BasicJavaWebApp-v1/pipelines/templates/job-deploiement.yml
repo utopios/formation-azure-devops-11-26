@@ -1,0 +1,55 @@
+# Job de déploiement réutilisable : l'équivalent YAML d'un stage de release classique.
+# Un job « deployment » cible un environment Azure DevOps : historique des déploiements,
+# approbations et contrôles (checks) sont portés par l'environment, pas par le YAML.
+# L'artefact du stage Build est téléchargé automatiquement dans $(Pipeline.Workspace)/<nomArtefact>.
+# Déploiement simulé : l'application est démarrée sur l'agent, le temps du test de fumée.
+
+parameters:
+  - name: environnement
+    displayName: Environment Azure DevOps (java-dev, java-recette, java-prod)
+    type: string
+  - name: nomArtefact
+    type: string
+    default: webapp
+  - name: dependsOn
+    type: object
+    default: []
+
+jobs:
+  - deployment: Deployer
+    displayName: Déployer sur ${{ parameters.environnement }}
+    dependsOn: ${{ parameters.dependsOn }}
+    environment: ${{ parameters.environnement }}
+    pool:
+      vmImage: ubuntu-24.04
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: JavaToolInstaller@0
+              displayName: Utiliser Java 11
+              inputs:
+                versionSpec: '11'
+                jdkArchitectureOption: x64
+                jdkSourceOption: PreInstalled
+
+            - bash: |
+                set -euo pipefail
+                war=$(ls "$(Pipeline.Workspace)/${{ parameters.nomArtefact }}"/*.war)
+                nohup java -jar "$war" --server.port=8080 \
+                  > "$(Agent.TempDirectory)/webapp.log" 2>&1 &
+                echo $! > "$(Agent.TempDirectory)/webapp.pid"
+                echo "Application démarrée (pid $(cat "$(Agent.TempDirectory)/webapp.pid")) pour ${{ parameters.environnement }}"
+              displayName: Démarrer l'application (simulation de ${{ parameters.environnement }})
+
+            - template: test-de-fumee.yml
+              parameters:
+                urlBase: http://localhost:8080
+
+            - bash: |
+                kill "$(cat "$(Agent.TempDirectory)/webapp.pid")" 2>/dev/null || true
+                echo "##[group]Journal de l'application"
+                cat "$(Agent.TempDirectory)/webapp.log"
+                echo "##[endgroup]"
+              displayName: Arrêter l'application et afficher son journal
+              condition: always()
