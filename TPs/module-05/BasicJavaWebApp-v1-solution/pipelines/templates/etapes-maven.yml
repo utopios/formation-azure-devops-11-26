@@ -1,0 +1,48 @@
+# Template d'étapes : compiler, tester, publier le war.
+parameters:
+  - name: versionJdk
+    type: string
+    default: '1.11'
+    values:                # toute autre valeur est refusée avant le run
+      - '1.11'
+      - '1.17'
+  - name: executerTests
+    type: boolean
+    default: true
+  - name: nomArtefact
+    type: string
+    default: ''            # vide : pas d'artefact
+
+steps:
+  - task: Maven@3
+    displayName: Maven package (JDK ${{ parameters.versionJdk }})
+    inputs:
+      mavenPomFile: pom.xml
+      goals: package
+      javaHomeOption: JDKVersion
+      jdkVersionOption: ${{ parameters.versionJdk }}
+      ${{ if eq(parameters.executerTests, true) }}:
+        options: -B -ntp
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        testRunTitle: JUnit - JDK ${{ parameters.versionJdk }} - $(Build.BuildNumber)
+      ${{ else }}:
+        options: -B -ntp -DskipTests
+        publishJUnitResults: false
+
+  - script: ls -l target/                  # ajoutée à l'étape 5
+    displayName: Contenu de target
+
+  - ${{ if ne(parameters.nomArtefact, '') }}:
+      - task: CopyFiles@2
+        displayName: Copier le war
+        inputs:
+          Contents: '**/target/*.war'
+          TargetFolder: $(Build.ArtifactStagingDirectory)
+          flattenFolders: true             # le war à la racine de l'artefact, pas sous target/
+
+      - task: PublishPipelineArtifact@1
+        displayName: Publier l'artefact ${{ parameters.nomArtefact }}
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)
+          artifact: ${{ parameters.nomArtefact }}

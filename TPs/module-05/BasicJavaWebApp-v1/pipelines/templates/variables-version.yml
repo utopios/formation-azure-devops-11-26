@@ -1,0 +1,6 @@
+# Template de variables : la version de l'application, partagée par les pipelines.
+variables:
+  - name: versionMajeure
+    value: 1
+  - name: versionMineure
+    value: 0

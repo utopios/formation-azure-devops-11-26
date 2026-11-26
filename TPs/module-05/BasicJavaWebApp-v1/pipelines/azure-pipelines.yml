@@ -1,0 +1,27 @@
+name: $(versionMajeure).$(versionMineure).$(Rev:r)
+
+trigger: none
+
+parameters:
+  - name: executerTests
+    displayName: Exécuter les tests
+    type: boolean
+    default: true
+
+variables: 
+  - template: templates/variables-version.yml
+
+jobs:
+  - template: templates/job-maven.yml
+    parameters:
+      nomJob: Jdk11
+      versionJdk: '1.11'
+      executerTests: ${{ parameters.executerTests }}
+      nomArtefact: webapp
+  
+  - template: templates/job-maven.yml
+    parameters:
+      nomJob: Jdk17
+      versionJdk: '1.17'
+      executerTests: ${{ parameters.executerTests }}
+      nomArtefact: webapp-jdk17              # seul ce job publie le war

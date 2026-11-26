@@ -1,0 +1,25 @@
+# Template de job : un agent Ubuntu, et les étapes Maven.
+parameters:
+  - name: nomJob
+    type: string                # pas de valeur par défaut : obligatoire
+  - name: versionJdk
+    type: string
+    default: '1.11'
+  - name: executerTests
+    type: boolean
+    default: true
+  - name: nomArtefact
+    type: string
+    default: ''
+
+jobs:
+  - job: ${{ parameters.nomJob }}
+    displayName: Maven - JDK ${{ parameters.versionJdk }}
+    pool:
+      vmImage: ubuntu-24.04
+    steps:
+      - template: etapes-maven.yml        # relatif à CE fichier : même dossier
+        parameters:
+          versionJdk: ${{ parameters.versionJdk }}
+          executerTests: ${{ parameters.executerTests }}
+          nomArtefact: ${{ parameters.nomArtefact }}
