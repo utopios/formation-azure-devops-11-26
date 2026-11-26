@@ -7,7 +7,7 @@
 
 L'équipe Java a une application Spring Boot (Java 11, Maven, packagée en `war`). Chaque nouveau projet Java recopie le même pipeline de build, avec ses petites différences. Une correction doit être reportée à la main partout.
 
-Votre mission : écrire le pipeline de build et de test **une fois**, dans des templates, puis l'appeler en ne changeant que des paramètres.
+Votre mission : écrire le pipeline de build et de test **une fois**, dans des templates, puis l'appeler en ne changeant que des paramètres. Le war produit est ensuite déployé dans un environnement de dev, avec un template de job de déploiement.
 
 Ce TP est guidé : le code de chaque étape est donné. Recopiez-le à la main plutôt que par copier-coller, et répondez aux questions des points de contrôle.
 
@@ -19,7 +19,9 @@ pipelines/
 └── templates/
     ├── etapes-maven.yml        template d'étapes : compiler, tester, publier le war
     ├── job-maven.yml           template de job : un agent + les étapes ci-dessus
-    └── variables-version.yml   template de variables : le numéro de version
+    ├── variables-version.yml   template de variables : le numéro de version
+    ├── job-deploiement.yml     template de job de déploiement : vers un environment
+    └── test-de-fumee.yml       template d'étapes : vérifier que l'application répond
 ```
 
 ## Prérequis
@@ -40,6 +42,7 @@ pipelines/
 | 4 | Un template de job et un template de variables | 12 min |
 | 5 | Une modification, deux jobs | 5 min |
 | 6 | Trois erreurs à provoquer | 8 min |
+| 7 | Déployer en dev | 15 min |
 
 ---
 
@@ -353,6 +356,139 @@ Faites chaque erreur, lancez, lisez le message, puis **annulez-la** avant la sui
 - question : combien d'agents ont été utilisés par ces trois runs ? Qu'en concluez-vous sur le moment où les templates sont vérifiés ?
 - l'erreur A : `job-maven.yml` ne déclare pas de `values` pour `versionJdk`. Qui a refusé `1.8`, alors ?
 
+## Étape 7 — Déployer en dev (15 min)
+
+Le war est produit et publié. On le déploie maintenant dans un **environment** `java-dev`, avec un job de type `deployment` écrit, lui aussi, en template.
+
+Ici, le déploiement est **simulé** : l'application est démarrée sur l'agent, puis un test de fumée l'interroge. Le déploiement sur Azure viendra plus tard : il suffira de remplacer les étapes de simulation dans le template, sans toucher au pipeline.
+
+1. **L'environment.** Pipelines > Environments > **New environment** : nom `java-dev`, Resource **None** > Create.
+
+2. **Le test de fumée.** Créez `pipelines/templates/test-de-fumee.yml`, un template d'étapes :
+
+```yaml
+# Template d'étapes : vérifier que l'application répond ce qu'on attend.
+parameters:
+  - name: urlBase
+    type: string
+  - name: texteAttendu
+    type: string
+    default: Hello buddy
+
+steps:
+  - bash: |
+      set -euo pipefail
+      # --retry-connrefused : on réessaie tant que l'application démarre
+      reponse=$(curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 2 "${{ parameters.urlBase }}/")
+      echo "Réponse : $reponse"
+      if [ "$reponse" != "${{ parameters.texteAttendu }}" ]; then
+        echo "##vso[task.logissue type=error]Réponse inattendue : $reponse"
+        exit 1
+      fi
+    displayName: Test de fumée sur ${{ parameters.urlBase }}
+```
+
+3. **Le job de déploiement.** Créez `pipelines/templates/job-deploiement.yml` :
+
+```yaml
+# Job de déploiement réutilisable : l'équivalent YAML d'un stage de release classique.
+# Un job « deployment » cible un environment Azure DevOps : historique des déploiements,
+# approbations et contrôles (checks) sont portés par l'environment, pas par le YAML.
+# L'artefact du stage Build est téléchargé automatiquement dans $(Pipeline.Workspace)/<nomArtefact>.
+# Déploiement simulé : l'application est démarrée sur l'agent, le temps du test de fumée.
+
+parameters:
+  - name: environnement
+    displayName: Environment Azure DevOps (java-dev, java-recette, java-prod)
+    type: string
+  - name: nomArtefact
+    type: string
+    default: webapp
+  - name: dependsOn
+    type: object
+    default: []
+
+jobs:
+  - deployment: Deployer
+    displayName: Déployer sur ${{ parameters.environnement }}
+    dependsOn: ${{ parameters.dependsOn }}
+    environment: ${{ parameters.environnement }}
+    pool:
+      vmImage: ubuntu-24.04
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: JavaToolInstaller@0
+              displayName: Utiliser Java 11
+              inputs:
+                versionSpec: '11'
+                jdkArchitectureOption: x64
+                jdkSourceOption: PreInstalled
+
+            - bash: |
+                set -euo pipefail
+                war=$(ls "$(Pipeline.Workspace)/${{ parameters.nomArtefact }}"/*.war)
+                nohup java -jar "$war" --server.port=8080 \
+                  > "$(Agent.TempDirectory)/webapp.log" 2>&1 &
+                echo $! > "$(Agent.TempDirectory)/webapp.pid"
+                echo "Application démarrée (pid $(cat "$(Agent.TempDirectory)/webapp.pid")) pour ${{ parameters.environnement }}"
+              displayName: Démarrer l'application (simulation de ${{ parameters.environnement }})
+
+            - template: test-de-fumee.yml
+              parameters:
+                urlBase: http://localhost:8080
+
+            - bash: |
+                kill "$(cat "$(Agent.TempDirectory)/webapp.pid")" 2>/dev/null || true
+                echo "##[group]Journal de l'application"
+                cat "$(Agent.TempDirectory)/webapp.log"
+                echo "##[endgroup]"
+              displayName: Arrêter l'application et afficher son journal
+              condition: always()
+```
+
+4. **Deux stages.** Dans `build-java.yml`, remplacez la section `jobs:` par des `stages:`. Les deux jobs Maven passent dans un stage `Build`, inchangés :
+
+```yaml
+stages:
+  - stage: Build
+    displayName: Compiler et tester
+    jobs:
+      - template: templates/job-maven.yml
+        parameters:
+          nomJob: Jdk11
+          versionJdk: '1.11'
+          executerTests: ${{ parameters.executerTests }}
+          nomArtefact: webapp
+
+      # ... le job Jdk17, inchangé
+
+  - stage: DeployDev
+    displayName: Déployer en dev
+    dependsOn: Build
+    jobs:
+      - template: templates/job-deploiement.yml
+        parameters:
+          environnement: java-dev
+          nomArtefact: webapp
+```
+
+5. Poussez et lancez. Au premier run, le stage `DeployDev` attend une autorisation (*This pipeline needs permission to access a resource*) : **View** > **Permit**. Le pipeline a désormais le droit d'utiliser `java-dev`.
+6. **Une approbation.** Pipelines > Environments > `java-dev` > menu ⋮ > **Approvals and checks** > **+** > Approvals : ajoutez-vous comme approbateur > Create. Relancez, puis approuvez quand le stage vous le demande.
+
+**Point de contrôle 7** :
+
+- la vue du run montre deux stages, `Build` puis `DeployDev`, reliés par une flèche ;
+- dans le job « Déployer sur java-dev » :
+  - la première étape télécharge l'artefact `webapp`, sans que vous l'ayez écrite ;
+  - il n'y a pas de *Checkout* ;
+  - « Test de fumée » affiche `Réponse : Hello buddy` ;
+- Pipelines > Environments > `java-dev` > **Deployments** liste vos runs ;
+- avec l'approbation, le stage affiche *Waiting* : aucun agent n'est utilisé pendant l'attente ;
+- question : où se trouve le war sur l'agent de déploiement ? Pourquoi le job n'a-t-il pas besoin du code source ?
+- question : lancez avec « Exécuter les tests » décoché. Un war **non testé** part en dev. Comment l'empêcher, avec ce que vous avez vu à l'étape 3 ?
+
 ## Pour aller plus loin (si vous avez fini)
 
 Les deux appels de `job-maven.yml` ne diffèrent que par la version du JDK. Remplacez-les par une boucle `${{ each }}` sur un paramètre de pipeline de type `object` :
@@ -372,6 +508,8 @@ parameters:
 
 ## Livrable
 
-- les quatre fichiers de `pipelines/` sur la branche `feature/templates` ;
-- un run vert nommé `1.0.x`, avec deux jobs, deux séries de tests et l'artefact `webapp` ;
+- les six fichiers de `pipelines/` sur la branche `feature/templates` ;
+- un run vert nommé `1.0.x`, avec deux stages :
+  - `Build` : deux jobs, deux séries de tests, l'artefact `webapp` ;
+  - `DeployDev` : un test de fumée réussi, et le déploiement visible dans l'environment `java-dev` ;
 - les réponses aux questions des points de contrôle.
