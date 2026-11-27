@@ -1,0 +1,13 @@
+{
+  "name": "parknord-tarifs",
+  "version": "1.0.0",
+  "description": "Calcul du prix de stationnement des parkings ParkNord",
+  "main": "js/tarifs.js",
+  "files": [
+    "js/tarifs.js"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "UNLICENSED"
+}

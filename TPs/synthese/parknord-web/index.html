@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ParkNord - Simulateur de prix</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main>
+    <h1>Simulateur de prix</h1>
+    <p class="sous-titre">Parkings ParkNord : Lille-Flandres, Euralille, Roubaix-Grand-Place</p>
+
+    <section class="tarifs">
+      <h2>Tarifs</h2>
+      <ul>
+        <li>Les 15 premières minutes sont gratuites.</li>
+        <li>Ensuite, 2,50 € par heure entamée.</li>
+        <li>20 € au maximum par période de 24 heures.</li>
+      </ul>
+    </section>
+
+    <form id="simulateur" novalidate>
+      <fieldset>
+        <legend>Durée de stationnement</legend>
+        <label>Heures <input id="heures" type="number" min="0" step="1" value="0"></label>
+        <label>Minutes <input id="minutes" type="number" min="0" max="59" step="1" value="0"></label>
+      </fieldset>
+      <button type="submit">Calculer</button>
+    </form>
+
+    <p id="resultat" aria-live="polite"></p>
+  </main>
+
+  <footer>Version __VERSION__</footer>
+
+  <script src="js/tarifs.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
