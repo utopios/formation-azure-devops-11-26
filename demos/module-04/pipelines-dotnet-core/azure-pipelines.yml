@@ -1,107 +1,84 @@
-trigger:
-- master
+# Intégration continue de parknord-web : vérifier le code, produire le site
+# numéroté, publier le calcul comme paquet npm dans le feed du projet.
+# La validation des pull requests passe par la stratégie de branche de main.
 
-parameters:
-- name: configuration
-  displayName: Configuration de compilation
-  type: string
-  default: Debug
-  values:
-  - Release
-  - Debug
+name: 1.0.$(Rev:r)
+
+trigger:
+  branches:
+    include:
+      - main
 
 pool:
   vmImage: ubuntu-24.04
 
 variables:
-  buildConfiguration: ${{ parameters.configuration }}
-  feedName: 'RDV-Ihab/feed'
-  packageVersion: '1.0.$(Build.BuildId)'
-  packagesDir: '$(Build.ArtifactStagingDirectory)/packages'
-  appDir: '$(Build.ArtifactStagingDirectory)/app'
+  versionNode: 22.x
 
 stages:
-- stage: BuildAndTest
-  variables:
-    projetsTests: '**/dotnetcore-tests/*.csproj'
-  jobs:
-  - job: BuildAndTestJob
-    variables:
-      titreTests: 'dotnet test $(buildConfiguration) - $(Build.BuildNumber)'
-    steps:
-    - script: |
-        echo "buildConfiguration = $(buildConfiguration)"
-        echo "projetsTests       = $(projetsTests)"
-        echo "titreTests         = $(titreTests)"
-        echo "packageVersion     = $(packageVersion)"
-      displayName: Afficher les variables
+  - stage: Verifier
+    displayName: Vérifier le code
+    jobs:
+      - job: Tests
+        steps:
+          - task: UseNode@1
+            displayName: Node.js $(versionNode)
+            inputs:
+              version: $(versionNode)
 
-    - task: DotNetCoreCLI@2
-      displayName: 'Build .NET Core project'
-      inputs:
-        command: build
-        projects: '**/*.csproj'
-        arguments: '--configuration $(buildConfiguration)'
+          - script: >
+              node --test
+              --test-reporter=spec --test-reporter-destination=stdout
+              --test-reporter=junit --test-reporter-destination=resultats-tests.xml
+            displayName: Tests unitaires
 
-    - task: DotNetCoreCLI@2
-      displayName: 'Test .NET Core project'
-      inputs:
-        command: test
-        projects: '$(projetsTests)'
-        arguments: '--configuration $(buildConfiguration) --no-build'
-        testRunTitle: '$(titreTests)'
+          - task: PublishTestResults@2
+            displayName: Publier les résultats des tests
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: resultats-tests.xml
+              testRunTitle: parknord $(Build.BuildNumber)
 
-    - task: DotNetCoreCLI@2
-      displayName: 'Build a package'
-      inputs:
-        command: pack
-        packagesToPack: '**/*.csproj;!**/dotnetcore-tests/*.csproj'
-        configuration: '$(buildConfiguration)'
-        nobuild: true
-        versioningScheme: byEnvVar
-        versionEnvVar: packageVersion
-        packDirectory: '$(packagesDir)'
+  - stage: Site
+    displayName: Produire le site
+    dependsOn: Verifier
+    jobs:
+      - job: Site
+        steps:
+          - bash: |
+              set -euo pipefail
+              site="$(Build.ArtifactStagingDirectory)/site"
+              mkdir -p "$site"
+              cp -R index.html css js "$site/"
+              sed -i "s/__VERSION__/$(Build.BuildNumber)/" "$site/index.html"
+            displayName: Copier le site et y inscrire la version
 
-    - script: ls -l $(packagesDir)
-      displayName: Lister les packages
+          - task: PublishPipelineArtifact@1
+            displayName: Publier l'artefact site
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/site
+              artifact: site
 
-    - task: DotNetCoreCLI@2
-      displayName: Push vers Azure Artifacts
-      condition: succeeded()
-      inputs:
-        command: push
-        packagesToPush: '$(packagesDir)/*.nupkg'
-        nuGetFeedType: internal
-        publishVstsFeed: '$(feedName)'
+  - stage: Paquet
+    displayName: Publier le paquet
+    dependsOn: Site
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: Npm
+        steps:
+          - task: UseNode@1
+            displayName: Node.js $(versionNode)
+            inputs:
+              version: $(versionNode)
 
-    - ${{ if eq(parameters.configuration, 'Release') }}:
-      - task: DotNetCoreCLI@2
-        displayName: Publier l'application
-        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
-        inputs:
-          command: publish
-          publishWebProjects: false
-          projects: |
-            **/*.csproj
-            !**/dotnetcore-tests/*.csproj
-          arguments: '--configuration $(buildConfiguration) --output $(appDir)'
-          zipAfterPublish: true
+          - task: npmAuthenticate@0
+            displayName: S'authentifier auprès du feed
+            inputs:
+              workingFile: .npmrc
 
-      - task: PublishPipelineArtifact@1
-        displayName: Publier l'artefact
-        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
-        inputs:
-          targetPath: '$(appDir)'
-          artifact: app
-
-- stage: Rapport
-  condition: always()
-  jobs:
-  - job: Resume
-    steps:
-    - script: |
-        echo 'buildConfiguration = $(buildConfiguration)'
-        echo 'projetsTests       = $(projetsTests)'
-        echo 'titreTests         = $(titreTests)'
-        echo 'aDesTests          = $(aDesTests)'
-      displayName: Ce que voit un autre stage
+          - bash: |
+              set -euo pipefail
+              npm version "$(Build.BuildNumber)" --no-git-tag-version --allow-same-version
+              npm publish
+            displayName: Publier parknord-tarifs $(Build.BuildNumber)

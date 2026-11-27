@@ -1,0 +1,84 @@
+# Intégration continue de parknord-web : vérifier le code, produire le site
+# numéroté, publier le calcul comme paquet npm dans le feed du projet.
+# La validation des pull requests passe par la stratégie de branche de main.
+
+name: 1.0.$(Rev:r)
+
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  versionNode: 22.x
+
+stages:
+  - stage: Verifier
+    displayName: Vérifier le code
+    jobs:
+      - job: Tests
+        steps:
+          - task: UseNode@1
+            displayName: Node.js $(versionNode)
+            inputs:
+              version: $(versionNode)
+
+          - script: >
+              node --test
+              --test-reporter=spec --test-reporter-destination=stdout
+              --test-reporter=junit --test-reporter-destination=resultats-tests.xml
+            displayName: Tests unitaires
+
+          - task: PublishTestResults@2
+            displayName: Publier les résultats des tests
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: resultats-tests.xml
+              testRunTitle: parknord $(Build.BuildNumber)
+
+  - stage: Site
+    displayName: Produire le site
+    dependsOn: Verifier
+    jobs:
+      - job: Site
+        steps:
+          - bash: |
+              set -euo pipefail
+              site="$(Build.ArtifactStagingDirectory)/site"
+              mkdir -p "$site"
+              cp -R index.html css js "$site/"
+              sed -i "s/__VERSION__/$(Build.BuildNumber)/" "$site/index.html"
+            displayName: Copier le site et y inscrire la version
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publier l'artefact site
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/site
+              artifact: site
+
+  - stage: Paquet
+    displayName: Publier le paquet
+    dependsOn: Site
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: Npm
+        steps:
+          - task: UseNode@1
+            displayName: Node.js $(versionNode)
+            inputs:
+              version: $(versionNode)
+
+          - task: npmAuthenticate@0
+            displayName: S'authentifier auprès du feed
+            inputs:
+              workingFile: .npmrc
+
+          - bash: |
+              set -euo pipefail
+              npm version "$(Build.BuildNumber)" --no-git-tag-version --allow-same-version
+              npm publish
+            displayName: Publier parknord-tarifs $(Build.BuildNumber)
