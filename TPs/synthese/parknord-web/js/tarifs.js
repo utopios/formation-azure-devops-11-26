@@ -7,6 +7,8 @@ const PRIX_HEURE_CENTIMES = 250;
 const PLAFOND_JOUR_CENTIMES = 2000;
 const MINUTES_PAR_JOUR = 24 * 60;
 
+const FORFAIT_TICKET_PERDU_CENTIMES = 3000;
+
 // La durée saisie, en minutes, ou null si la saisie n'est pas valide :
 // des nombres entiers, des heures positives, des minutes de 0 à 59.
 function dureeEnMinutes(heures, minutes) {
@@ -26,14 +28,10 @@ function prixDUneJournee(minutes) {
 
 // Le prix d'un stationnement. Les premières minutes sont gratuites ; au-delà,
 // chaque journée complète coûte le plafond, et le reste se paie à l'heure entamée.
-function prixEnCentimes(dureeMinutes) {
-  if (dureeMinutes < MINUTES_GRATUITES) {
-    return 0;
-  }
-  const joursComplets = Math.floor(dureeMinutes / MINUTES_PAR_JOUR);
-  const reste = dureeMinutes % MINUTES_PAR_JOUR;
-  return joursComplets * PLAFOND_JOUR_CENTIMES + prixDUneJournee(reste);
-}
+function prixEnCentimes(dureeMinutes, ticketPerdu = false) {
+       if (ticketPerdu) {
+         return FORFAIT_TICKET_PERDU_CENTIMES;
+       }
 
 // 1250 centimes s'affichent "12,50 €".
 function enEuros(centimes) {

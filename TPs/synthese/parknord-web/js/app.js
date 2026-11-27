@@ -11,6 +11,11 @@ function afficher(texte, classe) {
 formulaire.addEventListener("submit", (evenement) => {
   evenement.preventDefault();
 
+  if (document.getElementById("ticket-perdu").checked) {
+         afficher("Prix : " + enEuros(prixEnCentimes(0, true)), "prix");
+         return;
+       }
+       
   const duree = dureeEnMinutes(
     document.getElementById("heures").value,
     document.getElementById("minutes").value

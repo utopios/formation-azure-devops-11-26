@@ -17,6 +17,7 @@
         <li>Les 15 premières minutes sont gratuites.</li>
         <li>Ensuite, 2,50 € par heure entamée.</li>
         <li>20 € au maximum par période de 24 heures.</li>
+        <li>Ticket perdu : forfait de 30 €.</li>
       </ul>
     </section>
 
@@ -25,6 +26,7 @@
         <legend>Durée de stationnement</legend>
         <label>Heures <input id="heures" type="number" min="0" step="1" value="0"></label>
         <label>Minutes <input id="minutes" type="number" min="0" max="59" step="1" value="0"></label>
+        <label class="case"><input id="ticket-perdu" type="checkbox"> Ticket perdu</label>
       </fieldset>
       <button type="submit">Calculer</button>
     </form>

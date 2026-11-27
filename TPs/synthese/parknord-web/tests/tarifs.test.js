@@ -40,6 +40,12 @@ describe("Prix d'un stationnement", () => {
   test("25 heures coûtent une journée et une heure, 22,50 €", () => {
     assert.equal(prixEnCentimes(25 * 60), 2250);
   });
+
+  test("un ticket perdu coûte le forfait de 30 €, quelle que soit la durée", () => {
+       assert.equal(prixEnCentimes(10, true), 3000);
+       assert.equal(prixEnCentimes(3 * 24 * 60, true), 3000);
+     });
+
 });
 
 describe("Affichage", () => {
